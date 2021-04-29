@@ -9,10 +9,13 @@ import com.github.derklaro.requestbuilder.result.http.StatusCode;
 import com.github.derklaro.requestbuilder.types.MimeTypes;
 import com.google.gson.*;
 import com.google.gson.reflect.TypeToken;
+import org.bukkit.Bukkit;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
 import java.lang.reflect.Type;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.UUID;
@@ -29,6 +32,8 @@ public class Profile {
     private static final String UUID_REQUEST_URL = "https://api.mojang.com/users/profiles/minecraft/%s";
 
     private static final String TEXTURES_REQUEST_URL = "https://sessionserver.mojang.com/session/minecraft/profile/%s?unsigned=%b";
+
+    private static final String MINESKIN_API_URL = "https://api.mineskin.org/get/id/%s";
 
     private static final Pattern UNIQUE_ID_PATTERN = Pattern.compile("(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})");
 
@@ -65,6 +70,32 @@ public class Profile {
         this.uniqueId = uniqueId;
         this.name = name;
         this.properties = properties;
+    }
+
+    public Profile(UUID uuid, String name, long mineSkinId) {
+        RequestBuilder requestBuilder = RequestBuilder.newBuilder(String.format(MINESKIN_API_URL, mineSkinId))
+                .addHeader("User-Agent", "npc-lib/" + Bukkit.getBukkitVersion()).setConnectTimeout(10, TimeUnit.SECONDS)
+                .setRequestMethod(RequestMethod.GET)
+                .enableRedirectFollow()
+                .accepts(MimeTypes.getMimeType("json"));
+
+        try (RequestResult result = requestBuilder.fireAndForget()) {
+            if (result.getStatusCode() != 200) {
+                throw new IOException("response code is not 200 (" + result.getStatusCode() + ")");
+            }
+            JsonObject jsonObject = JsonParser.parseString(result.getResultAsString()).getAsJsonObject().getAsJsonObject("data").getAsJsonObject("texture");
+
+            Property property = new Property("textures", jsonObject.get("value").getAsString(), jsonObject.get("signature").getAsString());
+            this.properties = Arrays.asList(property);
+            this.name = name;
+            this.uniqueId = uuid;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public Profile(String name, long mineSkinId) {
+        this(UUID.randomUUID(), name, mineSkinId);
     }
 
     /**
